@@ -41,24 +41,6 @@ defmodule JwtServer do
   }
   @jws_rs %{"alg" => "RS256", "kid" => @kid}
 
-  post "/hs/authn_token" do
-    with %{"password" => pass, "username" => username} <- conn.params,
-         user_data <- @user_data[username],
-         %{password: ^pass} <- user_data do
-      now = now()
-
-      payload = %{
-        username: username,
-        exp: now + @ttl,
-        iat: now
-      }
-
-      send_resp(conn, 200, sign(@jwk_hs, payload, @jws_hs))
-    else
-      _ -> send_resp(conn, 403, "forbidden")
-    end
-  end
-
   post "/hs/authn_acl_token" do
     with %{"password" => pass, "username" => username} <- conn.params,
          user_data <- @user_data[username],
@@ -78,7 +60,7 @@ defmodule JwtServer do
     end
   end
 
-  post "/rs/authn_token" do
+  post "/rs/authn_acl_token" do
     with %{"password" => pass, "username" => username} <- conn.params,
          user_data <- @user_data[username],
          %{password: ^pass} <- user_data do
@@ -87,7 +69,8 @@ defmodule JwtServer do
       payload = %{
         username: username,
         exp: now + @ttl,
-        iat: now
+        iat: now,
+        acl: user_data[:acl]
       }
 
       send_resp(conn, 200, sign(jwk_rs(:priv), payload, @jws_rs))

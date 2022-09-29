@@ -4,7 +4,8 @@ defmodule EMQXTest.DockerCompose do
   use GenServer
 
   @docker_compose "docker-compose"
-  @line_max 9999
+  @line_max 9_999
+  @shutdown 30_000
 
   defstruct port: nil,
             file: "",
@@ -12,12 +13,28 @@ defmodule EMQXTest.DockerCompose do
             current_line: "",
             lines: %{}
 
+  def start_supervised(id, file, env) do
+    child_spec = %{
+      id: id,
+      start: {DC, :start_link, [file, env]},
+      restart: :temporary,
+      shutdown: @shutdown,
+      type: :worker
+    }
+    Supervisor.start_child(EMQXTest.Supervisor, child_spec)
+  end
+
+
   def start_link(file, env) do
     GenServer.start_link(__MODULE__, %{file: file, env: env})
   end
 
   def get_logs(pid, tag) do
     GenServer.call(pid, {:get_logs, tag})
+  end
+
+  def get_logs(pid, tag, pattern) do
+    GenServer.call(pid, {:get_logs, tag, pattern})
   end
 
   def stop(pid) do
@@ -32,7 +49,7 @@ defmodule EMQXTest.DockerCompose do
         {:spawn_executable, docker_compose()},
         [
           :binary,
-          :stderr_to_stdout,
+          # :stderr_to_stdout,
           args: ["-f", file, "up", "--build", "--no-color"],
           env: charlist_env(env),
           line: @line_max
@@ -47,7 +64,14 @@ defmodule EMQXTest.DockerCompose do
     {:reply, log_lines, st}
   end
 
+  def handle_call({:get_logs, tag, pattern}, _from, %DC{lines: lines} = st) do
+    log_lines = Map.get(lines, tag, [])
+    filtered_log_lines = Enum.filter(log_lines, fn log -> log =~ pattern end)
+    {:reply, filtered_log_lines, st}
+  end
+
   def handle_call(:stop, _from, st) do
+    do_stop(st)
     {:stop, :normal, :ok, st}
   end
 
@@ -64,17 +88,24 @@ defmodule EMQXTest.DockerCompose do
     {:stop, reason, st}
   end
 
-  def terminate(%DC{port: port, file: file, env: env}) do
-    true = Port.close(port)
-    System.cmd(
-      docker_compose(),
-      ["-f", file, "down", "--remove-orphans"],
-      [{:env, env}, :stderr_to_stdout]
-    )
+  def terminate(st) do
+    do_stop(st)
   end
 
   defp docker_compose() do
     System.find_executable(@docker_compose)
+  end
+
+  defp do_stop(%DC{port: port, file: file, env: env}) do
+    true = Port.close(port)
+    System.cmd(
+      docker_compose(),
+      ["-f", file, "down", "--remove-orphans"],
+      [
+        {:env, env},
+        # :stderr_to_stdout
+      ]
+    )
   end
 
   defp append_line(:eol, line, %DC{current_line: current_line, lines: lines} = st) do

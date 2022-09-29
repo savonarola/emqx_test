@@ -16,17 +16,37 @@ services:
     environment:
       - EMQX_ALLOW_ANONYMOUS=false
       - EMQX_ACL_NOMATCH=deny
-
+      - EMQX_LOG__TO=console
+      - EMQX_LOG__LEVEL=debug
       - EMQX_LOADED_PLUGINS=emqx_auth_jwt
-
       - EMQX_AUTH__JWT__SECRET=emqxsecret
       - EMQX_AUTH__JWT__FROM=password
       - EMQX_AUTH__JWT__VERIFY_CLAIMS=on
       - EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u
       - EMQX_AUTH__JWT__ACL_CLAIM_NAME=acl
-
     ports:
       - "1883:1883"
+    networks:
+      - jwt_authz
+  emqx_rs:
+    build:
+      context: ./assets/emqx
+      args:
+        EMQX_VERSION: $EMQX_VERSION
+    environment:
+      - EMQX_ALLOW_ANONYMOUS=false
+      - EMQX_ACL_NOMATCH=deny
+      - EMQX_LOG__TO=console
+      - EMQX_LOG__LEVEL=debug
+      - EMQX_LOADED_PLUGINS=emqx_auth_jwt
+      - EMQX_AUTH__JWT__JWKS=http://jwt_server:4001/keys.json
+      - EMQX_AUTH__JWT__JWKS__REFRESH_INTERVAL=10s
+      - EMQX_AUTH__JWT__FROM=password
+      - EMQX_AUTH__JWT__VERIFY_CLAIMS=on
+      - EMQX_AUTH__JWT__VERIFY_CLAIMS__USERNAME=%u
+      - EMQX_AUTH__JWT__ACL_CLAIM_NAME=acl
+    ports:
+      - "1884:1883"
     networks:
       - jwt_authz
 
